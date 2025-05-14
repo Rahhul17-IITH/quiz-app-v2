@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Quiz App DynamoDB Infrastructure
+
+Resources:
+  QuizAppUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: QuizAppUsers
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  QuizAppQuizzesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: QuizAppQuizzes
+      AttributeDefinitions:
+        - AttributeName: quizId
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: quizId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL

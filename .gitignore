@@ -1,0 +1,19 @@
+# Node modules (in any folder)
+**/node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# dotenv environment files
+**/.env
+
+# Mac and system files
+.DS_Store
+
+# Docker
+**/build/
+**/dist/
+
+# VSCode
+.vscode/
