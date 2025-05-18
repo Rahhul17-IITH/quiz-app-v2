@@ -1,0 +1,364 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Full infrastructure for Quiz App (VPC, Subnets, ALB, DynamoDB, ECS)
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+  PublicSubnet1Cidr:
+    Type: String
+    Default: 10.0.1.0/24
+  PublicSubnet2Cidr:
+    Type: String
+    Default: 10.0.2.0/24
+  BackendImage:
+    Type: String
+    Description: ECR image URI for backend
+  FrontendImage:
+    Type: String
+    Description: ECR image URI for frontend
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+  AwsAccessKeyId:
+    Type: String
+    NoEcho: true
+  AwsSecretAccessKey:
+    Type: String
+    NoEcho: true
+  JwtSecret:
+    Type: String
+    NoEcho: true
+  BackendPort:
+    Type: String
+    Default: "3001"
+  FrontendPort:
+    Type: String
+    Default: "80"
+  Hostname:
+    Type: String
+    Default: "0.0.0.0"
+
+Resources:
+  # --- Network ---
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: QuizAppVPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: QuizAppIGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1Cidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: QuizAppPublicSubnet1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2Cidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: QuizAppPublicSubnet2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: QuizAppPublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  AssociateRouteTable1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  AssociateRouteTable2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- Security Groups ---
+  QuizAppALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: QuizAppALBSecurityGroup
+
+  QuizAppServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Service Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref QuizAppALBSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          SourceSecurityGroupId: !Ref QuizAppALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: QuizAppServiceSecurityGroup
+
+  # --- ALB ---
+  QuizAppALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: quiz-app-alb
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      SecurityGroups:
+        - !Ref QuizAppALBSecurityGroup
+      Type: application
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: quiz-app-frontend-tg
+      Port: 80
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: /
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: quiz-app-backend-tg
+      Port: 3001
+      Protocol: HTTP
+      VpcId: !Ref VPC
+      TargetType: ip
+      HealthCheckPath: /api/auth/login
+
+  ALBListenerFrontend:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+      LoadBalancerArn: !Ref QuizAppALB
+      Port: 80
+      Protocol: HTTP
+
+  ALBListenerBackend:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+      LoadBalancerArn: !Ref QuizAppALB
+      Port: 3001
+      Protocol: HTTP
+
+  # --- DynamoDB ---
+  QuizAppUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: QuizAppUsers
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  QuizAppQuizzesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: QuizAppQuizzes
+      AttributeDefinitions:
+        - AttributeName: quizId
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: quizId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: username-index
+          KeySchema:
+            - AttributeName: username
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  # --- ECS Cluster and Services ---
+  QuizAppCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: quiz-app-cluster
+
+  BackendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: quiz-app-backend-task
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: arn:aws:iam::160885268386:role/ecsTaskExecutionRole
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Ref BackendImage
+          PortMappings:
+            - ContainerPort: !Ref BackendPort
+          Essential: true
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AwsRegion
+            - Name: AWS_ACCESS_KEY_ID
+              Value: !Ref AwsAccessKeyId
+            - Name: AWS_SECRET_ACCESS_KEY
+              Value: !Ref AwsSecretAccessKey
+            - Name: JWT_SECRET
+              Value: !Ref JwtSecret
+            - Name: PORT
+              Value: !Ref BackendPort
+            - Name: HOSTNAME
+              Value: !Ref Hostname
+
+  FrontendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: quiz-app-frontend-task
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: arn:aws:iam::160885268386:role/ecsTaskExecutionRole
+      ContainerDefinitions:
+        - Name: frontend
+          Image: !Ref FrontendImage
+          PortMappings:
+            - ContainerPort: !Ref FrontendPort
+          Essential: true
+          Environment:
+            - Name: REACT_APP_API_URL
+              Value: !Sub "http://${QuizAppALB.DNSName}:3001"
+            - Name: PORT
+              Value: !Ref FrontendPort
+            - Name: HOSTNAME
+              Value: !Ref Hostname
+
+  BackendService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListenerBackend
+    Properties:
+      ServiceName: quiz-app-backend-service
+      Cluster: !Ref QuizAppCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref BackendTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref QuizAppServiceSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+      LoadBalancers:
+        - TargetGroupArn: !Ref BackendTargetGroup
+          ContainerName: backend
+          ContainerPort: !Ref BackendPort
+
+  FrontendService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListenerFrontend
+    Properties:
+      ServiceName: quiz-app-frontend-service
+      Cluster: !Ref QuizAppCluster
+      LaunchType: FARGATE
+      DesiredCount: 1
+      TaskDefinition: !Ref FrontendTaskDefinition
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - !Ref QuizAppServiceSecurityGroup
+          Subnets:
+            - !Ref PublicSubnet1
+            - !Ref PublicSubnet2
+      LoadBalancers:
+        - TargetGroupArn: !Ref FrontendTargetGroup
+          ContainerName: frontend
+          ContainerPort: !Ref FrontendPort
+
+Outputs:
+  VpcId:
+    Description: VPC ID
+    Value: !Ref VPC
+  PublicSubnet1Id:
+    Description: Public Subnet 1 ID
+    Value: !Ref PublicSubnet1
+  PublicSubnet2Id:
+    Description: Public Subnet 2 ID
+    Value: !Ref PublicSubnet2
+  ALBDNSName:
+    Description: ALB DNS Name
+    Value: !GetAtt QuizAppALB.DNSName
+  UsersTableName:
+    Description: Users Table Name
+    Value: !Ref QuizAppUsersTable
+  QuizzesTableName:
+    Description: Quizzes Table Name
+    Value: !Ref QuizAppQuizzesTable
