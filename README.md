@@ -189,18 +189,3 @@ curl -X DELETE https://<ALB_DNS>/api/quizzes/<quiz_id>
 
 
 ---
-
-graph TD
-  User((User))
-  subgraph AWS Cloud
-    ALB[Application Load Balancer<br/>HTTPS/443, HTTP/80]
-    FE[ECS Fargate: Frontend (React/Nginx)]
-    BE[ECS Fargate: Backend (Node.js/Express)]
-    DB[(DynamoDB)]
-  end
-
-  User-->|HTTPS|ALB
-  ALB-->|80|FE
-  ALB-->|3001|BE
-  FE-->|API Calls (HTTPS/443 via ALB)|ALB
-  BE-->|DynamoDB API|DB
