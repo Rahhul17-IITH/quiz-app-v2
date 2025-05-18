@@ -43,7 +43,6 @@ built with **Node.js**, **React**, **DynamoDB**, **Docker**, and **AWS ECS**.
 git clone https://github.com/your-username/quiz-app-v2.git
 cd quiz-app-v2
 
-text
 
 ### 2. Environment Setup
 
@@ -57,7 +56,6 @@ AWS_SECRET_ACCESS_KEY=your-secret-key
 JWT_SECRET=your-jwt-secret
 PORT=3001
 
-text
 
 #### **Frontend**
 
@@ -65,13 +63,11 @@ Create `frontend/.env`:
 
 REACT_APP_API_URL=http://localhost:3001
 
-text
 
 ### 3. Run Locally with Docker Compose
 
 docker-compose up --build
 
-text
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
 - Backend: [http://localhost:3001](http://localhost:3001)
@@ -88,7 +84,6 @@ docker build -t <your-frontend-ecr-uri>:latest ./frontend
 docker push <your-backend-ecr-uri>:latest
 docker push <your-frontend-ecr-uri>:latest
 
-text
 
 ### 2. Deploy Infrastructure with CloudFormation
 
@@ -96,7 +91,6 @@ Edit `infra/quiz-app-all.yml` parameters as needed, then run:
 
 ./infra/deploy-quiz-app-v2-all.sh
 
-text
 
 ### 3. Access the App
 
@@ -134,7 +128,6 @@ curl -X POST https://<ALB_DNS>/api/auth/signup
 -H "Content-Type: application/json"
 -d '{"username": "testuser", "password": "testpassword"}'
 
-text
 
 ### **Login**
 
@@ -142,7 +135,6 @@ curl -X POST https://<ALB_DNS>/api/auth/login
 -H "Content-Type: application/json"
 -d '{"username": "testuser", "password": "testpassword"}'
 
-text
 
 ### **Create a new quiz**
 
@@ -160,21 +152,18 @@ curl -X POST https://<ALB_DNS>/api/quizzes
 ]
 }'
 
-text
 
 ### **Get all quizzes**
 
 curl -X GET https://<ALB_DNS>/api/quizzes
 -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-text
 
 ### **Get a specific quiz**
 
 curl -X GET https://<ALB_DNS>/api/quizzes/<quiz_id>
 -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-text
 
 ### **Update a quiz**
 
@@ -192,13 +181,11 @@ curl -X PUT https://<ALB_DNS>/api/quizzes/<quiz_id>
 ]
 }'
 
-text
 
 ### **Delete a quiz**
 
 curl -X DELETE https://<ALB_DNS>/api/quizzes/<quiz_id>
 -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
-text
 
 ---
